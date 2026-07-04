@@ -79,8 +79,20 @@ type provisionRequest struct {
 	ConfigMapName    string `json:"configMapName"`
 	ConfigMapKey     string `json:"configMapKey"`
 
-	Integrations        []integrationRequest `json:"integrations"`
-	RemovedIntegrations []integrationRequest `json:"removedIntegrations"`
+	Integrations          []integrationRequest   `json:"integrations"`
+	RemovedIntegrations   []integrationRequest   `json:"removedIntegrations"`
+	ModelProviders        []modelProviderRequest `json:"modelProviders"`
+	RemovedModelProviders []modelProviderRequest `json:"removedModelProviders"`
+}
+
+type modelProviderRequest struct {
+	Provider    string `json:"provider"`
+	Model       string `json:"model"`
+	APIKey      string `json:"apiKey"`
+	SecretName  string `json:"secretName"`
+	SecretKey   string `json:"secretKey"`
+	GCPProject  string `json:"gcpProject"`
+	GCPLocation string `json:"gcpLocation"`
 }
 
 type integrationRequest struct {
@@ -136,11 +148,14 @@ type stateResponse struct {
 	CreatedAt      string                  `json:"createdAt,omitempty"`
 	SecretNames    []string                `json:"secretNames,omitempty"`
 	CredentialRefs []credentialRefResponse `json:"credentialRefs,omitempty"`
+	Integrations   []integrationRequest    `json:"integrations,omitempty"`
+	ModelProviders []modelProviderRequest  `json:"modelProviders,omitempty"`
 }
 
 type credentialRefResponse struct {
 	Credential string `json:"credential,omitempty"`
 	Provider   string `json:"provider,omitempty"`
+	Type       string `json:"type,omitempty"`
 	Name       string `json:"name,omitempty"`
 	Key        string `json:"key,omitempty"`
 }
