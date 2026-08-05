@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-console
+  labels:
+    app.kubernetes.io/name: agent-console
+  annotations:
+    image.openshift.io/triggers: |
+      [{"from":{"kind":"ImageStreamTag","name":"agent-console:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"app\")].image"}]
+spec:
+  replicas: 1
+  # The state volume is ReadWriteOnce, so a rolling update would deadlock: the
+  # new pod cannot attach the volume until the old pod releases it, and the old
+  # pod is not terminated until the new one is ready. Recreate accepts a few
+  # seconds of downtime instead.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent-console
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agent-console
+    spec:
+      serviceAccountName: agent-console
+      containers:
+        - name: app
+          image: agent-console:latest
+          imagePullPolicy: Always
+          env:
+            - name: LISTEN_ADDR
+              value: ":8080"
+            # Where agent state lives inside a Claw pod, and which container
+            # holds it. AGENT_DATA_DIR is deliberately unset: setting it would
+            # switch the console into single-directory local mode.
+            - name: CLAW_AGENTS_DIR
+              value: /home/node/.openclaw/agents
+            - name: CLAW_CONTAINER
+              value: gateway
+            # Where observed memory writes are kept. Without it the console
+            # still works, but its record of what agents wrote is lost on every
+            # restart, which the memory page then says outright.
+            - name: CONSOLE_STATE_DIR
+              value: /var/lib/agent-console
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/agent-console
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+        - name: oauth-proxy
+          image: quay.io/openshift/origin-oauth-proxy:4.21
+          imagePullPolicy: IfNotPresent
+          args:
+            - --provider=openshift
+            # A dedicated OAuthClient rather than the service account: SA
+            # OAuth clients may not request user:full, and without that scope
+            # the forwarded token could not read Claws or exec into pods.
+            - --client-id=agent-console
+            - --client-secret-file=/etc/proxy/oauth-client/client_secret
+            - --scope=user:full
+            # The user's token rides to the console on every request and is
+            # the sole credential for its Kubernetes reads. The console holds
+            # no impersonation power of its own.
+            - --pass-access-token=true
+            - --upstream=http://127.0.0.1:8080
+            - --http-address=0.0.0.0:4180
+            - --https-address=
+            - --email-domain=*
+            - --cookie-secret-file=/etc/proxy/secrets/session_secret
+            - --pass-user-headers=true
+            - --skip-auth-regex=^/healthz$
+          ports:
+            - name: oauth
+              containerPort: 4180
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: cookie-secret
+              mountPath: /etc/proxy/secrets
+              readOnly: true
+            - name: oauth-client-secret
+              mountPath: /etc/proxy/oauth-client
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        # No UID coupling: the console reads through the Kubernetes exec API
+        # rather than a shared volume, so it runs as whatever UID
+        # restricted-v2 assigns it. The command it runs inside the Claw pod
+        # executes as that pod's own user.
+      volumes:
+        - name: cookie-secret
+          secret:
+            secretName: agent-console-cookie
+        - name: oauth-client-secret
+          secret:
+            secretName: agent-console-oauth-client
+        - name: state
+          persistentVolumeClaim:
+            claimName: agent-console-state

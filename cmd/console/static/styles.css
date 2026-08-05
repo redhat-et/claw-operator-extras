@@ -1,0 +1,766 @@
+/*
+Agent Console — Red Hat styled observability UI for OpenClaw agents.
+Palette and type follow the Red Hat / PatternFly token set; status colors use
+PatternFly semantics (green ok, red danger, gold warning, blue info).
+*/
+
+:root {
+  --bg: #f2f2f2;
+  --surface: #ffffff;
+  --surface2: #f5f5f5;
+  --border: #c7c7c7;
+  --border-soft: #e0e0e0;
+  --text: #151515;
+  --sub: #6a6e73;
+  --link: #0066cc;
+  --link-h: #004080;
+  --ok: #3d7317;
+  --ok-bg: #f3faf2;
+  --err: #b1380b;
+  --err-bg: #fdf4f2;
+  --warn: #7f5c00;
+  --warn-bg: #fbf3d8;
+  --gold: #dca614;
+  --info: #0066cc;
+  --info-bg: #e7f1fa;
+  --purple: #5e40be;
+  --purple-bg: #f2f0fb;
+  --teal: #0f7373;
+  --teal-bg: #e5f5f5;
+  --chart: #0066cc;
+  --shadow: 0 1px 2px rgba(21, 21, 21, .12);
+  --masthead: #151515;
+  --brand-red: #ee0000;
+}
+
+[data-ac-theme="dark"] {
+  --bg: #151515;
+  --surface: #212428;
+  --surface2: #2b2e33;
+  --border: #57595c;
+  --border-soft: #3c3f42;
+  --text: #e0e0e0;
+  --sub: #aaabac;
+  --link: #92c5f9;
+  --link-h: #bee1f4;
+  --ok: #7ec26e;
+  --ok-bg: #1e2f1a;
+  --err: #f4784a;
+  --err-bg: #3a1f18;
+  --warn: #e8c24a;
+  --warn-bg: #3a2f10;
+  --gold: #dca614;
+  --info: #73bcf7;
+  --info-bg: #18283a;
+  --purple: #b2a3ff;
+  --purple-bg: #282443;
+  --teal: #63c9c9;
+  --teal-bg: #123434;
+  --chart: #4394e5;
+  --shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+}
+
+body {
+  color: var(--text);
+  font-family: 'Red Hat Text', 'RedHatText', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+}
+
+a { color: var(--link); text-decoration: none; }
+a:hover { color: var(--link-h); text-decoration: underline; }
+
+h1, h2, h3, .display { font-family: 'Red Hat Display', 'RedHatDisplay', Helvetica, Arial, sans-serif; }
+.mono, pre, code { font-family: 'Red Hat Mono', 'RedHatMono', ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+select, input, button { font-family: inherit; font-size: inherit; }
+
+@keyframes acPulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+@keyframes acSpin { to { transform: rotate(360deg); } }
+
+/* ---------- shell ---------- */
+
+.shell { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+.masthead {
+  height: 56px;
+  flex: none;
+  background: var(--masthead);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px 0 20px;
+  position: relative;
+  z-index: 60;
+}
+.masthead a { color: #fff; }
+.masthead a:hover { text-decoration: none; color: #fff; }
+
+.brand { display: flex; align-items: center; gap: 10px; }
+/* Same mark and size as the deployer's masthead, so the two surfaces read as
+   one product rather than two that happen to share a cluster. */
+.brand-logo { flex: 0 0 auto; width: 30px; height: 30px; }
+.brand-text { display: flex; flex-direction: column; line-height: 1.05; }
+.brand-title { font-family: 'Red Hat Display', Helvetica, Arial, sans-serif; font-weight: 700; font-size: 16px; }
+
+.spacer { flex: 1; }
+
+.masthead-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #d2d2d2; }
+.masthead-item.dim { color: #8a8d90; }
+/* Who is signed in. This was the console pod's hostname, which named the
+   replica that served the request rather than anything about the reader. */
+.masthead-user { font-size: 12.5px; color: #d2d2d2; }
+
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.sm { width: 7px; height: 7px; }
+.dot.pulse { animation: acPulse 1.6s infinite; }
+
+.integrity-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid #3c3f42;
+  border-radius: 999px;
+  padding: 4px 12px;
+  color: #f0c000;
+  font-weight: 600; font-size: 12px;
+  cursor: pointer;
+}
+.integrity-btn:hover { background: rgba(255, 255, 255, .16); }
+
+.icon-btn {
+  background: none;
+  border: 1px solid #3c3f42;
+  border-radius: 6px;
+  width: 32px; height: 32px;
+  color: #d2d2d2;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.icon-btn:hover { background: rgba(255, 255, 255, .12); }
+
+.popover {
+  position: absolute; top: 54px; right: 120px; width: 290px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
+  padding: 16px; z-index: 100;
+}
+.popover h3 { margin: 0 0 8px; font-size: 13px; font-weight: 700; }
+.popover-grid { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 13px; }
+.popover-note {
+  margin-top: 10px; font-size: 12px; color: var(--sub);
+  border-top: 1px solid var(--border-soft); padding-top: 8px;
+}
+
+.banner {
+  flex: none; background: var(--err); color: #fff;
+  padding: 9px 20px; display: flex; align-items: center; gap: 10px; font-weight: 500;
+}
+[data-ac-theme="dark"] .banner { background: #a30000; }
+
+.body { flex: 1; display: flex; min-height: 0; }
+
+.sidebar {
+  width: 216px; flex: none;
+  background: var(--surface);
+  border-right: 1px solid var(--border-soft);
+  padding: 12px 0;
+  overflow-y: auto;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px 9px 13px;
+  color: var(--sub);
+  border-left: 3px solid transparent;
+}
+.nav-item:hover { background: var(--surface2); text-decoration: none; }
+.nav-item.active { color: var(--text); font-weight: 700; border-left-color: var(--link); background: var(--surface2); }
+.nav-agent { padding: 8px 16px 8px 13px; gap: 8px; }
+.nav-agent .nav-agent-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-section {
+  margin: 16px 16px 6px;
+  font-family: 'Red Hat Display', sans-serif; font-weight: 700; font-size: 11px;
+  letter-spacing: .08em; color: var(--sub);
+}
+.nav-foot {
+  margin: 20px 16px 0; padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 11px; color: var(--sub); line-height: 1.5;
+}
+
+.main { flex: 1; min-width: 0; overflow-y: auto; position: relative; }
+/* Pages fill the window. A capped column left most of a wide screen empty
+   while the tables it was capping had to truncate their own content. */
+.page { padding: 20px 32px 40px; display: flex; flex-direction: column; gap: 16px; }
+/* Kept as a hook for prose-heavy pages; it no longer narrows the layout. */
+.page.narrow { max-width: none; }
+.page h1 { margin: 0; font-size: 22px; font-weight: 700; }
+.page-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.crumbs { font-size: 12px; color: var(--sub); }
+
+/* ---------- cards ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+}
+.card.pad { padding: 14px 16px; }
+.card.clip { overflow: hidden; }
+
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.stat-label { font-size: 12px; color: var(--sub); font-weight: 500; }
+.stat-row { display: flex; align-items: baseline; gap: 8px; margin-top: 2px; }
+.stat-value { font-family: 'Red Hat Display', sans-serif; font-weight: 700; font-size: 26px; }
+.stat-sub { font-size: 12px; color: var(--sub); }
+
+.agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.agent-card {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 16px;
+  color: var(--text);
+  display: flex; flex-direction: column; gap: 10px;
+  box-shadow: var(--shadow);
+}
+.agent-card:hover { text-decoration: none; color: var(--text); border-color: var(--link); }
+.agent-card-head { display: flex; align-items: center; gap: 10px; }
+.agent-emoji { font-size: 22px; flex: none; }
+.agent-ident { flex: 1; min-width: 0; }
+.agent-name { display: block; font-family: 'Red Hat Display', sans-serif; font-weight: 700; font-size: 15px; }
+.agent-desc { display: block; font-size: 12px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agent-step {
+  font-family: 'Red Hat Mono', monospace; font-size: 12px;
+  color: var(--info); background: var(--info-bg);
+  border-radius: 6px; padding: 6px 8px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.agent-foot { display: flex; align-items: flex-end; gap: 14px; font-size: 12px; color: var(--sub); }
+.agent-foot b { color: var(--text); }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: 999px; padding: 3px 10px;
+  font-weight: 600; font-size: 11px; white-space: nowrap; flex: none;
+}
+.chip { border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.spinner {
+  width: 8px; height: 8px;
+  border: 2px solid currentColor; border-top-color: transparent;
+  border-radius: 50%; display: inline-block;
+  animation: acSpin .9s linear infinite;
+}
+
+/* ---------- tabs + toolbar ---------- */
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border-soft); padding: 0 12px; }
+.tab {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--sub); font-weight: 600; font-size: 14px;
+  padding: 12px 14px; cursor: pointer; margin-bottom: -1px;
+}
+.tab.active { border-bottom-color: var(--link); color: var(--text); }
+
+.toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border-soft);
+}
+.toolbar .spacer { flex: 1; }
+.field {
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 8px; font-size: 13px;
+}
+.field.text { padding: 5px 10px; width: 190px; }
+.field.path { width: 290px; font-family: 'Red Hat Mono', monospace; font-size: 12px; }
+.filter-chip {
+  background: transparent; color: var(--sub);
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 4px 12px; font-weight: 600; font-size: 12px; cursor: pointer;
+}
+.filter-chip.on { border-color: currentColor; }
+.link-btn { background: none; border: none; color: var(--link); font-size: 13px; cursor: pointer; padding: 0; }
+.result-count { color: var(--sub); font-size: 12px; }
+.locked-filter {
+  background: var(--surface2); border: 1px solid var(--border-soft);
+  border-radius: 6px; padding: 5px 10px; font-size: 13px; color: var(--sub);
+}
+.locked-filter b { color: var(--text); }
+
+/* ---------- table ---------- */
+
+.table-scroll { overflow-x: auto; }
+table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 13px; }
+thead tr { text-align: left; color: var(--sub); font-size: 12px; }
+th { font-weight: 600; padding: 9px 8px; }
+th:first-child { padding-left: 16px; }
+th:last-child { padding-right: 16px; }
+th.num, td.num { text-align: right; font-family: 'Red Hat Mono', monospace; }
+.sort-btn { background: none; border: none; color: var(--sub); font-weight: 600; font-size: 12px; cursor: pointer; padding: 0; }
+tbody tr { border-top: 1px solid var(--border-soft); cursor: pointer; }
+tbody tr:hover { background: var(--surface2); }
+td { padding: 7px 8px; }
+td:first-child { padding-left: 16px; }
+td:last-child { padding-right: 16px; }
+td.when { white-space: nowrap; color: var(--sub); }
+/* Provenance chips stay pinned; only the prompt text truncates, so a
+   "recovered" marker is never pushed out of view by a long prompt. The flex
+   box is an inner wrapper — making the cell itself flex would take it out of
+   table layout and collapse the column. */
+td.prompt { max-width: 0; width: 55%; }
+td.prompt .prompt-wrap { display: flex; align-items: center; gap: 6px; }
+td.prompt .chip.tag { flex: none; font-size: 10px; }
+td.prompt .prompt-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.nowrap { white-space: nowrap; }
+
+.empty { padding: 40px; text-align: center; color: var(--sub); }
+.empty-title { font-family: 'Red Hat Display', sans-serif; font-weight: 700; font-size: 15px; color: var(--text); }
+.empty-body { margin-top: 4px; font-size: 13px; }
+.empty-state {
+  background: var(--surface); border: 1px dashed var(--border);
+  border-radius: 12px; padding: 48px; text-align: center;
+}
+.empty-state .icon { font-size: 34px; margin-bottom: 8px; }
+.empty-state h2 { margin: 0; font-size: 17px; font-weight: 700; }
+.empty-state p { color: var(--sub); max-width: 460px; margin: 8px auto 0; line-height: 1.5; }
+
+.more { padding: 10px; text-align: center; border-top: 1px solid var(--border-soft); }
+.more button {
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--link); padding: 6px 16px; font-size: 13px; cursor: pointer;
+}
+
+/* ---------- charts ---------- */
+
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.chart-title { font-weight: 600; font-size: 13px; margin-bottom: 10px; }
+.chart-title span { color: var(--sub); font-weight: 400; }
+.bars { display: flex; align-items: flex-end; gap: 4px; height: 80px; }
+.bar-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 80px; }
+.bar { border-radius: 2px 2px 0 0; }
+.bar.runs { background: var(--chart); }
+.bar.errs { background: var(--err); }
+.bar.tokens { background: var(--teal); opacity: .85; }
+.axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--sub); margin-top: 6px; }
+
+.donut-card { display: flex; align-items: center; gap: 14px; }
+.donut-wrap { position: relative; width: 120px; height: 120px; flex: none; }
+.donut-center {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; pointer-events: none;
+}
+.donut-total { font-family: 'Red Hat Display', sans-serif; font-weight: 700; font-size: 22px; }
+.donut-unit { font-size: 11px; color: var(--sub); }
+.legend { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+.legend span { display: flex; align-items: center; gap: 7px; }
+.swatch { width: 9px; height: 9px; border-radius: 2px; }
+
+.agent-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.agent-head .big-emoji { font-size: 34px; }
+.agent-head-main { flex: 1; min-width: 200px; }
+.agent-head-title { display: flex; align-items: center; gap: 10px; }
+.agent-head-meta { color: var(--sub); font-size: 13px; margin-top: 2px; }
+.head-stats { display: flex; gap: 22px; }
+.head-stat { text-align: right; }
+.head-stat-value { font-family: 'Red Hat Display', sans-serif; font-weight: 700; font-size: 20px; }
+.head-stat-label { font-size: 11px; color: var(--sub); }
+
+/* ---------- list rows ---------- */
+
+.row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px; border-top: 1px solid var(--border-soft); font-size: 13px;
+}
+.row .when { color: var(--sub); white-space: nowrap; width: 70px; }
+.row .grow { flex: 1; }
+.row .path {
+  font-family: 'Red Hat Mono', monospace; font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.row .dir { border-radius: 4px; padding: 2px 8px; font-weight: 700; font-size: 12px; width: 28px; text-align: center; }
+.row .dir-label { width: 130px; }
+
+/* ---------- replay ---------- */
+
+.replay-head {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--bg);
+  padding: 14px 24px 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.replay-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.replay-title .name { font-family: 'Red Hat Display', sans-serif; font-weight: 700; font-size: 17px; }
+.replay-title .sid { font-family: 'Red Hat Mono', monospace; font-size: 13px; color: var(--sub); }
+.follow-btn {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+  padding: 4px 12px; font-weight: 600; font-size: 12px; color: var(--text); cursor: pointer;
+}
+.toggle { width: 26px; height: 14px; border-radius: 999px; position: relative; transition: background .15s; background: var(--border); }
+.toggle.on { background: var(--info); }
+.toggle .knob {
+  position: absolute; top: 2px; left: 2px; width: 10px; height: 10px;
+  border-radius: 50%; background: #fff; transition: left .15s;
+}
+.toggle.on .knob { left: 14px; }
+
+.events { padding: 12px 24px 40px; font-family: 'Red Hat Mono', monospace; font-size: 12.5px; }
+.event-line {
+  display: grid; grid-template-columns: 44px 74px 130px 1fr 18px;
+  gap: 10px; align-items: center; padding: 5px 8px; border-radius: 6px; cursor: pointer;
+}
+.event-line:hover { background: var(--surface2); }
+.event-line .seq { color: var(--sub); text-align: right; }
+.event-line .time { color: var(--sub); }
+.event-line .type {
+  border-radius: 4px; padding: 1px 7px; font-size: 11px; font-weight: 500;
+  text-align: center; font-family: 'Red Hat Text', sans-serif;
+}
+.event-line .summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-line .summary.err { color: var(--err); }
+.event-line .caret { color: var(--sub); }
+.events pre {
+  margin: 2px 0 6px 128px;
+  background: var(--surface); border: 1px solid var(--border-soft); border-radius: 8px;
+  padding: 12px; overflow-x: auto; font-size: 12px; line-height: 1.5; color: var(--text);
+}
+
+.chat { padding: 20px 32px 40px; display: flex; flex-direction: column; gap: 12px; }
+.msg { display: flex; flex-direction: column; gap: 3px; }
+.msg.user { align-items: flex-end; }
+.msg.assistant { align-items: flex-start; }
+.msg-meta { font-size: 11px; color: var(--sub); }
+.msg-body {
+  background: var(--surface); border: 1px solid var(--border-soft);
+  border-radius: 10px; padding: 10px 14px; max-width: min(72ch, 100%);
+  line-height: 1.5; white-space: pre-wrap;
+}
+.msg.user .msg-body { background: var(--info-bg); }
+
+.resume-wrap { position: sticky; bottom: 16px; display: flex; justify-content: center; pointer-events: none; }
+.resume-btn {
+  pointer-events: auto; background: var(--info); color: #fff; border: none;
+  border-radius: 999px; padding: 8px 18px; font-weight: 600; font-size: 13px;
+  cursor: pointer; box-shadow: 0 4px 12px rgba(0, 0, 0, .3);
+}
+
+/* ---------- topology ---------- */
+
+.topo-ranges { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.topo-ranges button {
+  background: var(--surface); color: var(--sub); border: none;
+  padding: 6px 14px; font-weight: 600; font-size: 12px; cursor: pointer;
+}
+.topo-ranges button.active { background: var(--info); color: #fff; }
+/* The diagram is drawn in a fixed 680x380 viewBox, and the node emoji and
+   labels beside it are HTML at fixed px sizes. Letting the SVG stretch to a
+   full-width page scaled the circles up without scaling the labels, so it is
+   capped near its design size and centred instead. */
+.topo-canvas {
+  position: relative; width: 100%; max-width: 760px; margin: 0 auto;
+  aspect-ratio: 680 / 380;
+}
+.topo-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.topo-node-emoji { position: absolute; transform: translate(-50%, -50%); font-size: 26px; line-height: 1; }
+.topo-node-emoji:hover { text-decoration: none; }
+.topo-node-label {
+  position: absolute; transform: translateX(-50%); text-align: center;
+  color: var(--text); white-space: nowrap;
+}
+.topo-node-label:hover { text-decoration: none; color: var(--text); }
+.topo-node-label .n { display: block; font-family: 'Red Hat Display', sans-serif; font-weight: 700; font-size: 14px; }
+.topo-node-label .s { display: block; font-size: 11px; color: var(--sub); }
+.topo-edge-badge {
+  position: absolute; transform: translate(-50%, -50%);
+  background: var(--surface); color: var(--text);
+  border-radius: 999px; padding: 2px 10px;
+  font-weight: 600; font-size: 11px; cursor: pointer;
+}
+.topo-edge-badge.on { background: var(--info); color: #fff; }
+.section-head { padding: 12px 16px; border-bottom: 1px solid var(--border-soft); font-weight: 600; font-size: 14px; }
+.section-hint { padding: 24px; color: var(--sub); font-size: 13px; }
+
+/* ---------- memory ---------- */
+
+.mem-group-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; }
+.mem-group-head:hover { background: var(--surface2); }
+.mem-caret { color: var(--sub); width: 14px; }
+.mem-path { font-weight: 600; font-size: 13px; font-family: 'Red Hat Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mem-count {
+  background: var(--surface2); border: 1px solid var(--border-soft);
+  border-radius: 999px; padding: 1px 9px; font-size: 11px; color: var(--sub);
+}
+.mem-write { border-top: 1px solid var(--border-soft); padding: 12px 16px 14px 42px; }
+.mem-write-meta { display: flex; align-items: center; gap: 10px; font-size: 12px; margin-bottom: 8px; }
+.mem-write pre {
+  margin: 0; background: var(--surface2);
+  border: 1px solid var(--border-soft); border-radius: 8px;
+  padding: 10px 12px; font-family: 'Red Hat Mono', monospace; font-size: 12px;
+  line-height: 1.55; white-space: pre-wrap; color: var(--text);
+}
+
+.loading { padding: 60px; text-align: center; color: var(--sub); }
+
+@media (max-width: 760px) {
+  .sidebar { display: none; }
+  .masthead-item.hide-sm, .masthead-user { display: none; }
+  .page { padding: 16px 12px 24px; }
+}
+
+/* Scope picker: which Claw this console is reporting on. */
+.scope { display: flex; align-items: center; gap: 8px; margin-left: 4px; }
+.scope-label { font-size: 11px; color: #8a8d90; text-transform: uppercase; letter-spacing: .06em; }
+.scope-select {
+  background: rgba(255, 255, 255, .08);
+  color: #fff;
+  border: 1px solid #3c3f42;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  max-width: 280px;
+}
+.scope-select:hover { background: rgba(255, 255, 255, .16); }
+.scope-select option { background: #212428; color: #e0e0e0; }
+
+/* ---------- memory graph ---------- */
+
+.graph-wrap { display: flex; height: 100%; min-height: 0; }
+.graph-canvas-wrap { flex: 1; position: relative; min-width: 0; background: var(--surface2); overflow: hidden; }
+.graph-canvas-wrap canvas { display: block; width: 100%; height: 100%; }
+
+.graph-caption { position: absolute; top: 18px; left: 20px; pointer-events: none; max-width: 420px; }
+.graph-caption h1 { margin: 0; font-size: 20px; font-weight: 700; }
+.graph-caption p { margin: 5px 0 0; color: var(--sub); font-size: 12.5px; line-height: 1.5; }
+
+.graph-actions { position: absolute; bottom: 18px; left: 20px; display: flex; gap: 7px; }
+.graph-actions button {
+  height: 30px; padding: 0 13px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: var(--text); box-shadow: var(--shadow);
+}
+.graph-actions button:hover { border-color: var(--link); color: var(--link); }
+
+.graph-controls {
+  flex: 0 0 272px; border-left: 1px solid var(--border-soft); background: var(--surface);
+  overflow-y: auto; padding: 18px 16px; display: flex; flex-direction: column; gap: 20px;
+}
+.gc-head { display: flex; align-items: baseline; justify-content: space-between; }
+.gc-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--sub); margin-bottom: 9px;
+}
+.gc-search input {
+  width: 100%; height: 34px; padding: 0 11px; font-size: 13px;
+  background: var(--surface2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 7px; outline: none;
+}
+.glegend {
+  display: flex; align-items: center; gap: 10px;
+  padding: 5px 7px; border-radius: 6px; cursor: pointer; font-size: 12.5px;
+}
+.glegend:hover { background: var(--surface2); }
+.gswatch { width: 12px; height: 12px; border-radius: 50%; border: 2px solid; box-sizing: border-box; flex: none; }
+.gslider { display: block; font-size: 12px; color: var(--sub); font-weight: 600; margin-bottom: 14px; }
+.gslider input { display: block; width: 100%; margin-top: 6px; accent-color: var(--link); cursor: pointer; }
+.gc-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+.gc-hint { font-size: 12px; color: var(--sub); line-height: 1.5; }
+
+/* The opened page gets a column of its own rather than being squeezed into the
+   controls rail: the graph exists to find a memory worth reading, so reading it
+   should not be the cramped part. */
+.wiki-reader {
+  flex: 0 0 min(46%, 560px); min-width: 0;
+  border-left: 1px solid var(--border-soft); background: var(--surface);
+  display: flex; flex-direction: column; overflow-y: auto;
+}
+.wiki-reader .reader-head { position: sticky; top: 0; z-index: 2; }
+.wiki-claims { padding: 12px 24px 0; }
+.wiki-claims ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.55; }
+.wiki-claims li { margin-bottom: 6px; }
+
+@media (max-width: 1200px) {
+  /* Controls give way before the page being read does. */
+  .graph-wrap .graph-controls { display: none; }
+  .wiki-reader { flex: 0 0 min(52%, 560px); }
+}
+
+/* The graph fills the viewport rather than scrolling with the page. */
+.main:has(.graph-wrap) { overflow: hidden; }
+
+/* ---------- identity / sign out ---------- */
+
+.usermenu { position: relative; display: flex; align-items: center; }
+.avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--link); color: #fff; border: none; cursor: pointer;
+  font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  display: flex; align-items: center; justify-content: center;
+}
+.avatar:hover { filter: brightness(1.15); }
+.usermenu-pop {
+  position: absolute; top: 38px; right: 0; min-width: 220px; z-index: 120;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border-soft); border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .25); padding: 12px 14px;
+}
+.usermenu-name { font-weight: 600; font-size: 13px; word-break: break-all; }
+.usermenu-sub { font-size: 11px; color: var(--sub); margin-top: 2px; }
+.usermenu-out {
+  display: block; margin-top: 10px; padding-top: 9px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 13px; color: var(--link);
+}
+
+.watch-note {
+  font-size: 12px; color: var(--sub); background: var(--surface2);
+  border: 1px solid var(--border-soft); border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 12px; line-height: 1.5;
+}
+
+/* ---------- observed memory writes ---------- */
+
+/* Added lines are shown as a diff, since that is the only form in which the
+   claim "the agent wrote this" is actually checkable. */
+.diff { margin: 0; padding: 8px 16px 12px; background: var(--surface2); border-top: 1px solid var(--border-soft); }
+.diff .line {
+  font-family: 'Red Hat Mono', monospace; font-size: 12px; line-height: 1.6;
+  white-space: pre-wrap; word-break: break-word; color: var(--ok);
+}
+.diff .line::before { content: '+ '; opacity: .55; }
+.diff .rest { font-size: 11.5px; color: var(--sub); margin-top: 6px; }
+
+/* ---------- notes tree and reader ---------- */
+
+/* The notes are a filesystem, so they are shown as one: the tree gives the
+   shape of what an agent knows, which a list ordered by mtime never did. */
+.notes-layout {
+  display: grid; grid-template-columns: minmax(240px, 22%) 1fr; gap: 14px;
+  align-items: start; min-height: 0;
+}
+.tree {
+  background: var(--surface); border: 1px solid var(--border-soft); border-radius: 12px;
+  overflow: hidden; position: sticky; top: 0; max-height: calc(100vh - 190px);
+  display: flex; flex-direction: column;
+}
+.tree-search { padding: 10px; border-bottom: 1px solid var(--border-soft); }
+.tree-search input {
+  width: 100%; height: 30px; padding: 0 10px; font-size: 12.5px;
+  background: var(--surface2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; outline: none;
+}
+.tree-body { overflow-y: auto; padding: 6px 0 10px; }
+.tnode {
+  display: flex; align-items: center; gap: 6px; padding-right: 10px;
+  height: 25px; font-size: 12.5px; cursor: pointer; color: var(--text);
+}
+.tnode:hover { background: var(--surface2); text-decoration: none; }
+.tdir { font-weight: 600; }
+.tcaret { color: var(--sub); width: 10px; flex: none; font-size: 10px; }
+.tname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tcount { flex: none; font-size: 10.5px; color: var(--sub); font-family: 'Red Hat Mono', monospace; }
+.twhen { flex: none; font-size: 10.5px; color: var(--sub); }
+.tfile { color: var(--sub); }
+.tfile.on { background: var(--info-bg); color: var(--link); font-weight: 600; }
+.tfile.on .twhen { color: var(--link); }
+
+.reader {
+  background: var(--surface); border: 1px solid var(--border-soft);
+  border-radius: 12px; overflow: hidden; min-width: 0;
+}
+.reader-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 11px 18px; border-bottom: 1px solid var(--border-soft); background: var(--surface2);
+}
+.reader-title { font-family: 'Red Hat Display', sans-serif; font-weight: 700; font-size: 15px; }
+.reader-path { font-size: 11px; color: var(--sub); }
+
+/* Rendered note. Everything is escaped before it is given structure, so no
+   markup an agent wrote can reach the page. */
+.md { padding: 18px 24px 28px; font-size: 13.5px; line-height: 1.65; max-width: 82ch; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
+  font-family: 'Red Hat Display', sans-serif; font-weight: 700;
+  margin: 18px 0 6px; line-height: 1.3;
+}
+.md h1 { font-size: 20px; } .md h2 { font-size: 17px; } .md h3 { font-size: 15px; }
+.md h4, .md h5, .md h6 { font-size: 13.5px; }
+.md > :first-child { margin-top: 0; }
+.md p { margin: 0 0 9px; }
+.md ul, .md ol { margin: 0 0 10px; padding-left: 22px; }
+.md li { margin-bottom: 3px; }
+.md hr { border: none; border-top: 1px solid var(--border-soft); margin: 16px 0; }
+.md blockquote {
+  margin: 0 0 10px; padding: 2px 12px; color: var(--sub);
+  border-left: 3px solid var(--border);
+}
+.md code {
+  font-family: 'Red Hat Mono', monospace; font-size: 12px;
+  background: var(--surface2); border: 1px solid var(--border-soft);
+  border-radius: 4px; padding: 1px 4px;
+}
+.md-code {
+  font-family: 'Red Hat Mono', monospace; font-size: 12px; line-height: 1.5;
+  background: var(--surface2); border: 1px solid var(--border-soft);
+  border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin: 0 0 10px;
+}
+/* A link the note actually declared. Anchors are followable; the span form is
+   the same text where the target does not exist, so a dead link never looks
+   clickable. */
+.md-wl { color: var(--link); }
+a.md-wl { cursor: pointer; }
+a.md-wl:hover { text-decoration: underline; }
+.md-front { margin-bottom: 14px; }
+.md-front summary {
+  cursor: pointer; color: var(--sub); font-size: 11px;
+  text-transform: uppercase; letter-spacing: .05em; font-weight: 700;
+}
+.md-front pre {
+  font-family: 'Red Hat Mono', monospace; font-size: 11.5px; line-height: 1.5;
+  background: var(--surface2); border: 1px solid var(--border-soft);
+  border-radius: 8px; padding: 9px 11px; margin: 6px 0 0; overflow-x: auto;
+}
+
+@media (max-width: 1000px) {
+  .notes-layout { grid-template-columns: 1fr; }
+  .tree { position: static; max-height: 320px; }
+}
+
+/* ---------- session page ---------- */
+
+/* A session is a conversation of many runs. Each run is its own block so the
+   one you opened is identifiable, rather than every event in the file being
+   poured into a single list. */
+.session { padding: 8px 32px 40px; display: flex; flex-direction: column; gap: 8px; }
+.run-block { border: 1px solid var(--border-soft); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.run-block.current { border-color: var(--info); box-shadow: 0 0 0 1px var(--info); }
+.run-head {
+  display: flex; align-items: center; gap: 10px; padding: 9px 14px; cursor: pointer;
+}
+.run-head:hover { background: var(--surface2); }
+.run-block.current > .run-head { background: var(--info-bg); }
+.run-head .caret { color: var(--sub); flex: none; width: 12px; }
+.run-head .idx { color: var(--sub); font-size: 11px; font-family: 'Red Hat Mono', monospace; flex: none; }
+.run-head .when { flex: none; }
+.run-head .rp {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 13px;
+}
+.run-head .rmeta { flex: none; font-size: 11.5px; color: var(--sub); font-family: 'Red Hat Mono', monospace; }
+.run-body { border-top: 1px solid var(--border-soft); padding: 4px 6px 10px; }
+.run-prompt {
+  margin: 8px 10px 10px; padding: 10px 12px; border-radius: 8px;
+  background: var(--purple-bg); color: var(--text);
+  font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+}
+.run-facts { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 0 12px 8px; font-size: 12px; color: var(--sub); }
+.run-facts b { color: var(--text); font-weight: 600; }
+.session-head { padding: 16px 32px 10px; border-bottom: 1px solid var(--border-soft); }

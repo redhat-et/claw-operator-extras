@@ -1,0 +1,20 @@
+# The console's service account holds no permission to read tenant data, and
+# no impersonation power: every Kubernetes read is authorized by the logged-in
+# user's own OAuth token, which the oauth-proxy forwards per request. A
+# compromised console can act only with the tokens of users who actually
+# logged in, and only until they expire; it cannot become an arbitrary user
+# or group.
+#
+# Lets the oauth-proxy sidecar validate tokens and delegate authorization.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agent-console-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: agent-console
+    namespace: agent-console
