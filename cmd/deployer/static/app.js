@@ -21,14 +21,35 @@ function storedIntegrations(namespace, name) {
   }
 }
 
+function modelProviderStorageKey(namespace, name) {
+  if (!namespace || !name) {
+    return "";
+  }
+  return `openclaw-deployer.modelProviders.${namespace}.${name}`;
+}
+
+function storedModelProviders(namespace, name) {
+  const key = modelProviderStorageKey(namespace, name);
+  if (!key) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 const state = {
   namespace: initialNamespace,
   provider: localStorage.getItem("openclaw-deployer.provider") || "openrouter",
   selectedName: initialSelectedName,
   model: localStorage.getItem("openclaw-deployer.model") || "",
-  modelProviders: [],
+  modelProviders: storedModelProviders(initialNamespace, initialSelectedName),
   removedModelProviders: [],
   openClawImage: "",
+  version: "",
   secretName: "",
   secretKey: "",
   gcpProject: localStorage.getItem("openclaw-deployer.gcpProject") || "",
@@ -127,6 +148,7 @@ const els = {
   defaultModel: document.getElementById("default-model"),
   openClawImage: document.getElementById("openClawImage"),
   openClawImageField: document.getElementById("openclaw-image-field"),
+  version: document.getElementById("version"),
   doctorFix: document.getElementById("doctorFix"),
   doctorFixHint: document.getElementById("doctor-fix-hint"),
   dreamingEnabled: document.getElementById("dreamingEnabled"),
@@ -221,6 +243,7 @@ els.clawName.value = state.selectedName;
 els.provider.value = state.provider;
 els.model.value = state.model;
 els.openClawImage.value = state.openClawImage;
+els.version.value = state.version;
 els.secretName.value = state.secretName;
 els.secretKey.value = state.secretKey;
 els.gcpProject.value = state.gcpProject;
@@ -503,6 +526,13 @@ function renderList(claws, opts = {}) {
       els.openClawImage.value = "";
       state.openClawImage = "";
     }
+    if (selected.version) {
+      els.version.value = selected.version;
+      state.version = selected.version;
+    } else if (!els.version.matches(":focus")) {
+      els.version.value = "";
+      state.version = "";
+    }
     els.doctorFix.checked = Boolean(selected.doctorFix);
     els.doctorFix.disabled = Boolean(selected.doctorFix);
     els.doctorFixHint.textContent = selected.doctorFix
@@ -519,6 +549,10 @@ function renderList(claws, opts = {}) {
     if (!els.openClawImage.matches(":focus")) {
       els.openClawImage.value = "";
       state.openClawImage = "";
+    }
+    if (!els.version.matches(":focus")) {
+      els.version.value = "";
+      state.version = "";
     }
     els.doctorFix.checked = false;
     els.doctorFix.disabled = false;
@@ -809,6 +843,7 @@ function renderModelProviders() {
       state.removedModelProviders.push(item);
       state.modelProviders.splice(idx, 1);
       state.integrationsDirty = true;
+      persistModelProviders();
       renderModelProviders();
       renderReview();
     });
@@ -1000,6 +1035,21 @@ function persistIntegrations() {
   localStorage.setItem(key, JSON.stringify(safe));
 }
 
+// apiKey is stripped because a Vertex entry carries a service account JSON,
+// which must never reach localStorage; a pending key stays in memory only.
+function persistModelProviders() {
+  const key = modelProviderStorageKey(state.namespace, state.selectedName);
+  if (!key) {
+    return;
+  }
+  const safe = state.modelProviders.map(({ apiKey, ...modelProvider }) => modelProvider);
+  if (safe.length === 0) {
+    localStorage.removeItem(key);
+    return;
+  }
+  localStorage.setItem(key, JSON.stringify(safe));
+}
+
 function loadIntegrationsForSelection() {
   const scope = integrationStorageKey(state.namespace, state.selectedName);
   if (scope === state.integrationScope) {
@@ -1007,7 +1057,7 @@ function loadIntegrationsForSelection() {
   }
   state.integrationScope = scope;
   state.integrations = storedIntegrations(state.namespace, state.selectedName);
-  state.modelProviders = [];
+  state.modelProviders = storedModelProviders(state.namespace, state.selectedName);
   state.removedIntegrations = [];
   state.removedModelProviders = [];
   state.integrationsDirty = false;
@@ -1022,12 +1072,20 @@ function clearIntegrationsForSelection() {
 	state.removedModelProviders = [];
 	state.integrationsDirty = false;
 	persistIntegrations();
+	persistModelProviders();
 	renderIntegrations();
 	renderModelProviders();
 }
 
 function clearStoredIntegrations(namespace, name) {
   const key = integrationStorageKey(namespace, name);
+  if (key) {
+    localStorage.removeItem(key);
+  }
+}
+
+function clearStoredModelProviders(namespace, name) {
+  const key = modelProviderStorageKey(namespace, name);
   if (key) {
     localStorage.removeItem(key);
   }
@@ -1589,6 +1647,7 @@ els.provision.addEventListener("click", async () => {
   const provider = els.provider.value;
   const model = els.model.value.trim();
   const openClawImage = state.userManagedEnabled ? els.openClawImage.value.trim() : "";
+  const version = els.version.value.trim();
   const configureAgent = shouldConfigureAgent();
   const vertex = isGoogleVertex();
   const apiKey = (vertex ? els.gcpCredentials.value : els.apiKey.value).trim();
@@ -1633,7 +1692,7 @@ els.provision.addEventListener("click", async () => {
     const current = await api("/api/provision", {
       method: "POST",
       body: JSON.stringify({
-        namespace, name, provider, configureAgent, model, openClawImage, apiKey, secretName, secretKey, gcpProject, gcpLocation, management, doctorFix,
+        namespace, name, provider, configureAgent, model, openClawImage, version, apiKey, secretName, secretKey, gcpProject, gcpLocation, management, doctorFix,
         dreamingEnabled, wikiEnabled,
         filesystemSource, gitURL, gitRef, gitPath, gitSecretName, gitUsername, gitPassword, configMapName,
         integrations, removedIntegrations, modelProviders, removedModelProviders,
@@ -1653,6 +1712,7 @@ els.provision.addEventListener("click", async () => {
     state.removedModelProviders = [];
     state.integrationsDirty = false;
     persistIntegrations();
+    persistModelProviders();
     els.agentFiles.value = "";
     state.selectedName = current.name || name;
     els.clawName.value = state.selectedName;
@@ -1673,6 +1733,7 @@ els.reset.addEventListener("click", () => {
   els.provider.value = "openrouter";
   els.model.value = "";
   els.openClawImage.value = "";
+  els.version.value = "";
   els.secretName.value = "";
   els.secretKey.value = "";
   els.gcpProject.value = "";
@@ -1703,8 +1764,11 @@ els.reset.addEventListener("click", () => {
   state.integrationsDirty = false;
   state.management = "user";
   state.openClawImage = "";
+  state.version = "";
   clearStoredIntegrations(previousNamespace, previousName);
+  clearStoredModelProviders(previousNamespace, previousName);
   persistIntegrations();
+  persistModelProviders();
   els.uploadName.hidden = true;
   renderErrors({});
   renderModelOptions();
@@ -1761,6 +1825,7 @@ async function deleteClaw(namespace, name) {
   try {
     await api(`/api/claw?namespace=${encodeURIComponent(namespace)}&name=${encodeURIComponent(name)}`, { method: "DELETE" });
     clearStoredIntegrations(namespace, name);
+    clearStoredModelProviders(namespace, name);
     if (namespace === state.namespace && name === state.selectedName) {
       clearIntegrationsForSelection();
     }
@@ -1855,6 +1920,7 @@ els.modelProviderAdd.addEventListener("click", () => {
     state.removedModelProviders = state.removedModelProviders.filter((item) => item.provider !== modelProvider.provider);
     state.modelProviders.push(modelProvider);
     state.integrationsDirty = true;
+    persistModelProviders();
     clearModelProviderCredentialForm();
     renderModelOptions();
     renderCredentialSecretHint();

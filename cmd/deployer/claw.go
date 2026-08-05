@@ -149,6 +149,7 @@ func stateFromClaw(claw map[string]any) stateResponse {
 	createdAt, _, _ := nestedString(claw, "metadata", "creationTimestamp")
 	model, _, _ := nestedString(claw, "spec", "config", "raw", "agents", "defaults", "model", "primary")
 	image, _, _ := nestedString(claw, "spec", "image")
+	version, _, _ := nestedString(claw, "spec", "version")
 	agentName := firstAgentName(claw)
 	management, _, _ := nestedString(claw, "spec", "config", "management")
 	if management == "" {
@@ -171,6 +172,7 @@ func stateFromClaw(claw map[string]any) stateResponse {
 		Providers:       providers,
 		Model:           model,
 		Image:           image,
+		Version:         version,
 		AgentName:       agentName,
 		Management:      management,
 		DoctorFix:       doctorFix,
@@ -317,6 +319,9 @@ func (s *server) applyClaw(ctx context.Context, identity userIdentity, req provi
 	}
 	if req.OpenClawImage != "" {
 		spec["image"] = req.OpenClawImage
+	}
+	if req.Version != "" {
+		spec["version"] = req.Version
 	}
 	if len(agentFiles) > 0 {
 		spec["agentFiles"] = agentFiles
@@ -1227,23 +1232,57 @@ func credentialRefs(claw map[string]any) []credentialRefResponse {
 	return refs
 }
 
+// modelProvidersFromClaw reports the configured model providers so the UI can
+// re-post them unchanged. GCP settings must be included, otherwise a Vertex
+// provider round-trips with an empty project and location and fails validation.
 func modelProvidersFromClaw(claw map[string]any) []modelProviderResponse {
 	refs := credentialRefs(claw)
 	models := configuredModelNames(claw)
+	gcp := credentialGCPByName(claw)
 	out := []modelProviderResponse{}
 	for _, ref := range refs {
 		provider := providerFromCredentialRef(ref)
 		if provider == "" {
 			continue
 		}
+		settings := gcp[ref.Credential]
 		out = append(out, modelProviderResponse{
-			Provider:   provider,
-			Model:      modelForProvider(provider, models),
-			SecretName: ref.Name,
-			SecretKey:  ref.Key,
+			Provider:    provider,
+			Model:       modelForProvider(provider, models),
+			SecretName:  ref.Name,
+			SecretKey:   ref.Key,
+			GCPProject:  settings.project,
+			GCPLocation: settings.location,
 		})
 	}
 	return out
+}
+
+type gcpCredentialSettings struct {
+	project  string
+	location string
+}
+
+func credentialGCPByName(claw map[string]any) map[string]gcpCredentialSettings {
+	credentials, _, _ := nestedSlice(claw, "spec", "credentials")
+	byName := map[string]gcpCredentialSettings{}
+	for _, credential := range credentials {
+		credentialMap, ok := credential.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := credentialMap["name"].(string)
+		if name == "" {
+			continue
+		}
+		project, _, _ := nestedString(credentialMap, "gcp", "project")
+		location, _, _ := nestedString(credentialMap, "gcp", "location")
+		if project == "" && location == "" {
+			continue
+		}
+		byName[name] = gcpCredentialSettings{project: project, location: location}
+	}
+	return byName
 }
 
 func providerFromCredentialRef(ref credentialRefResponse) string {

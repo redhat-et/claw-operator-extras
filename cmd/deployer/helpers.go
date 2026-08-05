@@ -31,7 +31,10 @@ import (
 var (
 	namespaceRE = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 	dnsCharRE   = regexp.MustCompile(`[^a-z0-9-]+`)
-	providers   = map[string]providerOption{
+	// versionRE mirrors the Claw CRD pattern for spec.version, which takes a
+	// tag only and not a full image reference.
+	versionRE = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+	providers = map[string]providerOption{
 		"anthropic": {
 			CredentialName:     "anthropic",
 			CredentialProvider: "anthropic",
@@ -274,6 +277,11 @@ func validateModelProviders(modelProviders []modelProviderRequest) error {
 			}
 		}
 		hasCredentialInput := modelProvider.APIKey != "" || modelProvider.SecretName != ""
+		// applyClaw skips a credential-less entry, so reject it here rather than
+		// reporting success for a save that changed nothing.
+		if !hasCredentialInput {
+			return fmt.Errorf("provider %q requires an API key or an existing secret name", modelProvider.Provider)
+		}
 		if option.RequiresGCP && hasCredentialInput && (modelProvider.GCPProject == "" || modelProvider.GCPLocation == "") {
 			return fmt.Errorf("GCP project and location are required for provider %q", modelProvider.Provider)
 		}

@@ -57,6 +57,7 @@ type provisionRequest struct {
 	AgentName       string `json:"agentName"`
 	Model           string `json:"model"`
 	OpenClawImage   string `json:"openClawImage"`
+	Version         string `json:"version"`
 	Provider        string `json:"provider"`
 	ConfigureAgent  bool   `json:"configureAgent"`
 	APIKey          string `json:"apiKey"`
@@ -146,6 +147,7 @@ type stateResponse struct {
 	Providers       []string                `json:"providers,omitempty"`
 	Model           string                  `json:"model,omitempty"`
 	Image           string                  `json:"image,omitempty"`
+	Version         string                  `json:"version,omitempty"`
 	AgentName       string                  `json:"agentName,omitempty"`
 	Management      string                  `json:"management,omitempty"`
 	DoctorFix       bool                    `json:"doctorFix"`
@@ -194,10 +196,12 @@ type integrationResponse struct {
 }
 
 type modelProviderResponse struct {
-	Provider   string `json:"provider"`
-	Model      string `json:"model,omitempty"`
-	SecretName string `json:"secretName,omitempty"`
-	SecretKey  string `json:"secretKey,omitempty"`
+	Provider    string `json:"provider"`
+	Model       string `json:"model,omitempty"`
+	SecretName  string `json:"secretName,omitempty"`
+	SecretKey   string `json:"secretKey,omitempty"`
+	GCPProject  string `json:"gcpProject,omitempty"`
+	GCPLocation string `json:"gcpLocation,omitempty"`
 }
 
 type listResponse struct {

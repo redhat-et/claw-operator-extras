@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"strings"
 	"testing"
 
@@ -551,6 +552,303 @@ func TestHandleProvisionAllowsRemovedGCPModelProviderIdentityOnly(t *testing.T) 
 	credentials, _, _ := nestedSlice(applied, "spec", "credentials")
 	require.Len(t, credentials, 1)
 	assert.Equal(t, "openai", credentials[0].(map[string]any)["name"])
+}
+
+func TestHandleProvisionGCPModelProviderRoundTrip(t *testing.T) {
+	var applied map[string]any
+	appliedSecrets := map[string]map[string]any{}
+	newClient := func() *http.Client {
+		return &http.Client{
+			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				body := `{}`
+				if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/claws/instance") {
+					if applied == nil {
+						body = `{"metadata":{"namespace":"sallyom-claw","name":"instance"},"spec":{}}`
+					} else {
+						encoded, err := json.Marshal(applied)
+						require.NoError(t, err)
+						body = string(encoded)
+					}
+				}
+				if r.Method == http.MethodPatch && strings.Contains(r.URL.Path, "/secrets/") {
+					var secret map[string]any
+					require.NoError(t, json.NewDecoder(r.Body).Decode(&secret))
+					appliedSecrets[path.Base(r.URL.Path)] = secret
+				}
+				if r.Method == http.MethodPatch && strings.HasSuffix(r.URL.Path, "/claws/instance") {
+					var next map[string]any
+					require.NoError(t, json.NewDecoder(r.Body).Decode(&next))
+					applied = next
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(body)),
+				}, nil
+			}),
+		}
+	}
+
+	s := &server{apiServer: "https://kubernetes.example.test", bearerToken: "service-account-token", client: newClient()}
+	payload, err := json.Marshal(map[string]any{
+		"namespace":  "sallyom-claw",
+		"name":       "instance",
+		"provider":   "openai",
+		"secretName": "existing-openai-key",
+		"modelProviders": []map[string]any{{
+			"provider":    "anthropic-vertex",
+			"model":       "anthropic-vertex/claude-sonnet-4-6",
+			"apiKey":      `{"type":"service_account"}`,
+			"gcpProject":  "example-project",
+			"gcpLocation": "us-east5",
+		}},
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/provision", bytes.NewReader(payload))
+	req.Header.Set("X-Forwarded-User", "sallyom")
+	rec := httptest.NewRecorder()
+
+	s.handleProvision(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	secret, ok := appliedSecrets["openclaw-instance-anthropic-vertex-gcp"]
+	require.True(t, ok, "expected the Vertex service account secret to be applied")
+	data, _, _ := nestedMap(secret, "data")
+	require.Contains(t, data, gcpSecretKey)
+	vertex := credentialNamed(t, applied, "anthropic-vertex")
+	assert.Equal(t, "gcp", vertex["type"])
+	assert.Equal(t, map[string]any{"project": "example-project", "location": "us-east5"}, vertex["gcp"])
+
+	state := stateFromClaw(applied)
+	var vertexState modelProviderResponse
+	for _, modelProvider := range state.ModelProviders {
+		if modelProvider.Provider == "anthropic-vertex" {
+			vertexState = modelProvider
+		}
+	}
+	require.Equal(t, "anthropic-vertex", vertexState.Provider)
+	assert.Equal(t, "example-project", vertexState.GCPProject)
+	assert.Equal(t, "us-east5", vertexState.GCPLocation)
+	assert.Equal(t, "openclaw-instance-anthropic-vertex-gcp", vertexState.SecretName)
+
+	resave, err := json.Marshal(map[string]any{
+		"namespace":      "sallyom-claw",
+		"name":           "instance",
+		"provider":       "openai",
+		"secretName":     "existing-openai-key",
+		"modelProviders": state.ModelProviders,
+	})
+	require.NoError(t, err)
+	s = &server{apiServer: "https://kubernetes.example.test", bearerToken: "service-account-token", client: newClient()}
+	req = httptest.NewRequest(http.MethodPost, "/api/provision", bytes.NewReader(resave))
+	req.Header.Set("X-Forwarded-User", "sallyom")
+	rec = httptest.NewRecorder()
+
+	s.handleProvision(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	vertex = credentialNamed(t, applied, "anthropic-vertex")
+	assert.Equal(t, map[string]any{"project": "example-project", "location": "us-east5"}, vertex["gcp"])
+}
+
+func credentialNamed(t *testing.T, claw map[string]any, name string) map[string]any {
+	t.Helper()
+	credentials, _, _ := nestedSlice(claw, "spec", "credentials")
+	for _, credential := range credentials {
+		credentialMap, ok := credential.(map[string]any)
+		if !ok {
+			continue
+		}
+		if credentialMap["name"] == name {
+			return credentialMap
+		}
+	}
+	require.Failf(t, "credential not found", "no credential named %q", name)
+	return nil
+}
+
+func TestHandleProvisionRejectsCredentialLessModelProvider(t *testing.T) {
+	clawApplied := false
+	client := &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			body := `{}`
+			if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/claws/instance") {
+				body = `{"metadata":{"namespace":"sallyom-claw","name":"instance"},"spec":{}}`
+			}
+			if r.Method == http.MethodPatch && strings.HasSuffix(r.URL.Path, "/claws/instance") {
+				clawApplied = true
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		}),
+	}
+	s := &server{apiServer: "https://kubernetes.example.test", bearerToken: "service-account-token", client: client}
+	body := `{"namespace":"sallyom-claw","name":"instance","provider":"openai","secretName":"existing-openai-key","modelProviders":[{"provider":"anthropic-vertex","model":"anthropic-vertex/claude-sonnet-4-6","gcpProject":"example-project","gcpLocation":"us-east5"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/provision", strings.NewReader(body))
+	req.Header.Set("X-Forwarded-User", "sallyom")
+	rec := httptest.NewRecorder()
+
+	s.handleProvision(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), "requires an API key or an existing secret name")
+	assert.False(t, clawApplied)
+}
+
+func TestValidateModelProvidersAcceptsStateDerivedEntries(t *testing.T) {
+	state := stateFromClaw(map[string]any{
+		"metadata": map[string]any{"name": "instance"},
+		"spec": map[string]any{
+			"credentials": []any{
+				map[string]any{
+					"name":      "anthropic-vertex",
+					"provider":  "anthropic",
+					"type":      "gcp",
+					"gcp":       map[string]any{"project": "example-project", "location": "us-east5"},
+					"secretRef": []any{map[string]any{"name": "openclaw-instance-anthropic-vertex-gcp", "key": gcpSecretKey}},
+				},
+			},
+		},
+	})
+	require.Len(t, state.ModelProviders, 1)
+
+	modelProviders := make([]modelProviderRequest, 0, len(state.ModelProviders))
+	for _, modelProvider := range state.ModelProviders {
+		modelProviders = append(modelProviders, modelProviderRequest{
+			Provider:    modelProvider.Provider,
+			Model:       modelProvider.Model,
+			SecretName:  modelProvider.SecretName,
+			SecretKey:   modelProvider.SecretKey,
+			GCPProject:  modelProvider.GCPProject,
+			GCPLocation: modelProvider.GCPLocation,
+		})
+	}
+
+	assert.NoError(t, validateModelProviders(modelProviders))
+}
+
+func TestHandleProvisionSetsSpecVersion(t *testing.T) {
+	var applied map[string]any
+	client := &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			statusCode := http.StatusOK
+			body := `{}`
+			if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/claws/instance") {
+				body = `{"metadata":{"namespace":"sallyom-claw","name":"instance"},"spec":{}}`
+			}
+			if r.Method == http.MethodPatch && strings.HasSuffix(r.URL.Path, "/claws/instance") {
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&applied))
+			}
+			return &http.Response{
+				StatusCode: statusCode,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		}),
+	}
+	s := &server{apiServer: "https://kubernetes.example.test", bearerToken: "service-account-token", client: client}
+	body := `{"namespace":"sallyom-claw","name":"instance","provider":"openai","secretName":"existing-openai-key","version":"2026.7.28"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/provision", strings.NewReader(body))
+	req.Header.Set("X-Forwarded-User", "sallyom")
+	rec := httptest.NewRecorder()
+
+	s.handleProvision(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	version, _, _ := nestedString(applied, "spec", "version")
+	assert.Equal(t, "2026.7.28", version)
+}
+
+func TestHandleProvisionRejectsInvalidVersion(t *testing.T) {
+	versions := map[string]string{
+		"whitespace inside": "2026.7 28",
+		"uppercase":         "2026.7.28-RC1",
+		"leading dash":      "-2026.7.28",
+		"image reference":   "ghcr.io/openclaw/openclaw:2026.7.28",
+	}
+	for name, version := range versions {
+		t.Run(name, func(t *testing.T) {
+			client := &http.Client{
+				Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Header:     make(http.Header),
+						Body:       io.NopCloser(strings.NewReader(`{}`)),
+					}, nil
+				}),
+			}
+			s := &server{apiServer: "https://kubernetes.example.test", bearerToken: "service-account-token", client: client}
+			payload, err := json.Marshal(map[string]any{
+				"namespace":  "sallyom-claw",
+				"name":       "instance",
+				"provider":   "openai",
+				"secretName": "existing-openai-key",
+				"version":    version,
+			})
+			require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodPost, "/api/provision", bytes.NewReader(payload))
+			req.Header.Set("X-Forwarded-User", "sallyom")
+			rec := httptest.NewRecorder()
+
+			s.handleProvision(rec, req)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+			assert.Contains(t, rec.Body.String(), "OpenClaw version")
+		})
+	}
+}
+
+func TestHandleProvisionPreservesVersionFromState(t *testing.T) {
+	existing := `{
+		"metadata":{"namespace":"sallyom-claw","name":"instance"},
+		"spec":{
+			"version":"2026.7.28",
+			"credentials":[{"name":"openai","provider":"openai","secretRef":[{"name":"existing-openai-key","key":"api-key"}]}]
+		}
+	}`
+	var claw map[string]any
+	require.NoError(t, json.Unmarshal([]byte(existing), &claw))
+	state := stateFromClaw(claw)
+	require.Equal(t, "2026.7.28", state.Version)
+
+	var applied map[string]any
+	client := &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			body := `{}`
+			if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/claws/instance") {
+				body = existing
+			}
+			if r.Method == http.MethodPatch && strings.HasSuffix(r.URL.Path, "/claws/instance") {
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&applied))
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		}),
+	}
+	s := &server{apiServer: "https://kubernetes.example.test", bearerToken: "service-account-token", client: client}
+	payload, err := json.Marshal(map[string]any{
+		"namespace":  "sallyom-claw",
+		"name":       "instance",
+		"provider":   "openai",
+		"secretName": "existing-openai-key",
+		"version":    state.Version,
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/provision", bytes.NewReader(payload))
+	req.Header.Set("X-Forwarded-User", "sallyom")
+	rec := httptest.NewRecorder()
+
+	s.handleProvision(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	version, _, _ := nestedString(applied, "spec", "version")
+	assert.Equal(t, "2026.7.28", version)
 }
 
 func TestHandleDeleteUsesRequestedNamespace(t *testing.T) {
@@ -1179,6 +1477,18 @@ func TestStateFromClawIncludesOpenClawImage(t *testing.T) {
 	})
 
 	assert.Equal(t, "quay.io/example/openclaw:custom", state.Image)
+}
+
+func TestStateFromClawIncludesVersion(t *testing.T) {
+	state := stateFromClaw(map[string]any{
+		"metadata": map[string]any{"name": "instance"},
+		"spec": map[string]any{
+			"version": "2026.7.28",
+			"config":  map[string]any{},
+		},
+	})
+
+	assert.Equal(t, "2026.7.28", state.Version)
 }
 
 func TestStateFromClawIncludesDoctorFix(t *testing.T) {
