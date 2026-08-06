@@ -141,6 +141,10 @@ const els = {
   vertexHelp: document.getElementById("vertex-help"),
   apiKey: document.getElementById("apiKey"),
   gcpCredentials: document.getElementById("gcpCredentials"),
+  gcpCredentialsFile: document.getElementById("gcpCredentialsFile"),
+  gcpCredentialsFileUploadControls: document.getElementById("gcp-file-upload-controls"),
+  gcpFileName: document.getElementById("gcp-file-name"),
+  gcpFileClear: document.getElementById("gcp-file-clear"),
   secretName: document.getElementById("secretName"),
   secretKey: document.getElementById("secretKey"),
   secretNamePreview: document.getElementById("secret-name-preview"),
@@ -825,6 +829,7 @@ function renderCredentialFields() {
   els.gcpCredentials.hidden = !vertex;
   els.vertexGuide.hidden = !vertex;
   els.vertexHelp.hidden = !vertex;
+  els.gcpCredentialsFileUploadControls.hidden = !vertex;
   if (vertex && !els.gcpLocation.value.trim()) {
     els.gcpLocation.value = defaultGCPLocations[els.provider.value] || "";
   }
@@ -843,6 +848,62 @@ function renderCredentialSecretHint() {
   hint.textContent = "The data key inside the Secret, for example ";
   hint.appendChild(code);
   hint.append(".");
+}
+
+function handleGcpCredentialsFileUpload(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const content = e.target.result;
+      // Validate it's valid JSON
+      JSON.parse(content);
+
+      // Populate textarea with file content
+      els.gcpCredentials.value = content;
+
+      // Show filename with checkmark
+      els.gcpFileName.textContent = `✓ ${file.name}`;
+      els.gcpFileName.hidden = false;
+      els.gcpFileClear.hidden = false;
+
+      // Clear any existing error
+      els.errCredential.hidden = true;
+      els.errCredential.textContent = '';
+
+    } catch (error) {
+      // Show error for invalid JSON
+      els.errCredential.textContent = 'Invalid JSON file. Please upload a valid service account key.';
+      els.errCredential.hidden = false;
+      event.target.value = ''; // Reset file input
+    }
+  };
+
+  reader.onerror = function() {
+    els.errCredential.textContent = 'Failed to read file. Please try again.';
+    els.errCredential.hidden = false;
+    event.target.value = '';
+  };
+
+  reader.readAsText(file);
+}
+
+function handleClearGcpCredentialsFile() {
+  // Clear file input
+  els.gcpCredentialsFile.value = '';
+
+  // Clear textarea
+  els.gcpCredentials.value = '';
+
+  // Hide filename and clear button
+  els.gcpFileName.hidden = true;
+  els.gcpFileClear.hidden = true;
+
+  // Clear any errors
+  els.errCredential.hidden = true;
+  els.errCredential.textContent = '';
 }
 
 function renderFilesystemSource() {
@@ -1685,6 +1746,10 @@ els.reset.addEventListener("click", () => {
   els.wikiEnabled.checked = false;
   els.apiKey.value = "";
   els.gcpCredentials.value = "";
+  // Clear file upload state
+  els.gcpCredentialsFile.value = '';
+  els.gcpFileName.hidden = true;
+  els.gcpFileClear.hidden = true;
   els.filesystemSource.value = "";
   els.gitURL.value = "";
   els.gitRef.value = "";
@@ -1825,6 +1890,10 @@ document.addEventListener("keydown", (event) => {
   }
 });
 els.copyYaml.addEventListener("click", () => copy_(generateYaml(), "yaml"));
+
+// GCP credentials file upload
+els.gcpCredentialsFile.addEventListener("change", handleGcpCredentialsFileUpload);
+els.gcpFileClear.addEventListener("click", handleClearGcpCredentialsFile);
 
 let namespaceDebounce;
 els.namespace.addEventListener("input", () => {
